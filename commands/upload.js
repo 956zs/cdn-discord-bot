@@ -19,8 +19,9 @@ module.exports = {
         let guildData = {};
         try {
             if (fs.existsSync(filePath)) {
-                guildData = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-                console.log('Guild data read from file:', guildData); // 调试信息
+                const data = fs.readFileSync(filePath, 'utf-8');
+                guildData = JSON.parse(data);
+                console.log('Guild data read from file:', guildData);
             } else {
                 return interaction.reply('Please set a default channel first using /setchannel.');
             }
@@ -40,7 +41,15 @@ module.exports = {
             return interaction.reply('Default channel not found.');
         }
 
-        fileManager.uploadFile(attachment.url, guildId, attachment.name, () => {
+        const CHUNK_SIZE = 8 * 1024 * 1024; // 8MB per chunk
+
+        fileManager.uploadFile(attachment.url, guildId, attachment.name, CHUNK_SIZE, async (chunks) => {
+            for (const chunk of chunks) {
+                await channel.send({
+                    files: [chunk]
+                });
+                fs.unlinkSync(chunk); // 删除本地的分割文件
+            }
             interaction.reply(`File ${attachment.name} uploaded successfully!`);
         });
     }

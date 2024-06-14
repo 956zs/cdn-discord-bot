@@ -1,9 +1,10 @@
 const fs = require('fs');
 const https = require('https');
 const path = require('path');
+const { splitFile, mergeChunks } = require('./chunkManager');
 
 module.exports = {
-    uploadFile: (url, guildId, filename, callback) => {
+    uploadFile: (url, guildId, filename, chunkSize, callback) => {
         const dir = path.join(__dirname, '..', 'uploads', guildId);
         if (!fs.existsSync(dir)) {
             fs.mkdirSync(dir, { recursive: true });
@@ -13,7 +14,10 @@ module.exports = {
         https.get(url, response => {
             response.pipe(file);
             file.on('finish', () => {
-                file.close(callback);
+                file.close(() => {
+                    const chunks = splitFile(dest, chunkSize);
+                    callback(chunks);
+                });
             });
         });
     },
@@ -31,5 +35,12 @@ module.exports = {
     fileExists: (guildId, filename) => {
         const filepath = path.join(__dirname, '..', 'uploads', guildId, filename);
         return fs.existsSync(filepath);
+    },
+    mergeChunks: (guildId, chunkFiles, outputFilename) => {
+        const dir = path.join(__dirname, '..', 'uploads', guildId);
+        const chunkPaths = chunkFiles.map(file => path.join(dir, file));
+        const outputPath = path.join(dir, outputFilename);
+        mergeChunks(chunkPaths, outputPath);
+        return outputPath;
     }
 };
