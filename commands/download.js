@@ -1,5 +1,5 @@
 const { SlashCommandBuilder } = require('@discordjs/builders');
-const { MessageActionRow, MessageSelectMenu } = require('discord.js');
+const { ActionRowBuilder, StringSelectMenuBuilder } = require('discord.js');
 const fileManager = require('../utils/fileManager');
 const fs = require('fs');
 const path = require('path');
@@ -25,8 +25,8 @@ module.exports = {
                 value: file,
             }));
 
-            const row = new MessageActionRow().addComponents(
-                new MessageSelectMenu()
+            const row = new ActionRowBuilder().addComponents(
+                new StringSelectMenuBuilder()
                     .setCustomId('selectFile')
                     .setPlaceholder('Select a file to download')
                     .addOptions(options)
