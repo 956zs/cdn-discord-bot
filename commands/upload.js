@@ -20,6 +20,7 @@ module.exports = {
         try {
             if (fs.existsSync(filePath)) {
                 guildData = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+                console.log('Guild data read from file:', guildData); // 调试信息
             } else {
                 return interaction.reply('Please set a default channel first using /setchannel.');
             }

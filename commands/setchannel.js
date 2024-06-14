@@ -30,6 +30,7 @@ module.exports = {
 
         try {
             fs.writeFileSync(filePath, JSON.stringify(guildData, null, 2), 'utf-8');
+            console.log('Guild data written to file:', guildData); // 调试信息
             await interaction.reply(`Default channel set to ${channel.name}`);
         } catch (error) {
             console.error('Error writing to guilds.json:', error);
