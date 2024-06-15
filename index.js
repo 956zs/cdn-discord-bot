@@ -9,6 +9,14 @@ const client = new Client({
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]
 });
 
+const { 
+    DefaultWebSocketManagerOptions: { 
+        identifyProperties 
+    } 
+} = require("@discordjs/ws");
+
+identifyProperties.browser = "Discord Android"; // or "Discord iOS"
+
 client.commands = new Collection();
 const commandFiles = fs.readdirSync(path.join(__dirname, 'commands')).filter(file => file.endsWith('.js'));
 
@@ -51,15 +59,36 @@ client.on('interactionCreate', async interaction => {
             console.error(error);
             await interaction.reply({ content: 'There was an error while executing this command!', ephemeral: true });
         }
-    } else if (interaction.isSelectMenu()) {
+    } else if (interaction.isStringSelectMenu()) {
+        if (interaction.customId === 'select-file') {
+            const selectedFile = interaction.values[0];
+            const guildId = interaction.guildId;
+
+            fileManager.downloadFile(guildId, selectedFile, (error, filePath) => {
+                if (error) {
+                    console.error(error);
+                    return interaction.reply('Error downloading the file.');
+                }
+
+                interaction.update({
+                    content: `File ${selectedFile} downloaded successfully!`,
+                    files: [{
+                        attachment: filePath,
+                        name: selectedFile
+                    }],
+                    components: []
+                });
+            });
+        }
+    } else if (interaction.isButton()) {
         const command = client.commands.get('download');
-        if (command) {
-            try {
-                await command.execute(interaction);
-            } catch (error) {
-                console.error(error);
-                await interaction.reply({ content: 'There was an error while executing this command!', ephemeral: true });
-            }
+        if (!command) return;
+
+        try {
+            await command.execute(interaction);
+        } catch (error) {
+            console.error(error);
+            await interaction.reply({ content: 'There was an error while executing this command!', ephemeral: true });
         }
     }
 });

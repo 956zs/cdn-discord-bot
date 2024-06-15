@@ -7,14 +7,19 @@ module.exports = {
         .setDescription('List all uploaded files'),
     async execute(interaction) {
         const guildId = interaction.guildId;
-        fileManager.listFiles(guildId, (err, files) => {
-            if (err) {
-                return interaction.reply('Unable to list files.');
+
+        fileManager.listFiles(guildId, (error, files) => {
+            if (error) {
+                console.error(error);
+                return interaction.reply('Error listing the files.');
             }
+
             if (files.length === 0) {
                 return interaction.reply('No files found.');
             }
-            interaction.reply(`Files: \n${files.join('\n')}`);
+
+            const fileList = files.join('\n');
+            interaction.reply(`Files:\n${fileList}`);
         });
     }
 };

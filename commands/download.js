@@ -1,9 +1,6 @@
-const { SlashCommandBuilder } = require('@discordjs/builders');
-const { ActionRowBuilder, StringSelectMenuBuilder } = require('discord.js');
-const fileManager = require('../utils/fileManager');
+const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, StringSelectMenuOptionBuilder } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
-const https = require('https');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -11,92 +8,78 @@ module.exports = {
         .setDescription('Download a file from the server'),
     async execute(interaction) {
         const guildId = interaction.guildId;
+        const filesPath = path.join(__dirname, '..', 'backups', guildId);
+        
+        if (!fs.existsSync(filesPath)) {
+            return interaction.reply('No backup files found.');
+        }
 
-        fileManager.listFiles(guildId, async (err, files) => {
-            if (err) {
-                return interaction.reply('Unable to list files.');
-            }
-            if (files.length === 0) {
-                return interaction.reply('No files found.');
-            }
-
-            const options = files.map(file => ({
-                label: file,
-                value: file,
-            }));
-
-            const row = new ActionRowBuilder().addComponents(
-                new StringSelectMenuBuilder()
-                    .setCustomId('selectFile')
-                    .setPlaceholder('Select a file to download')
-                    .addOptions(options)
+        const files = fs.readdirSync(filesPath);
+        const fileChunks = chunkArray(files, 25); // Discord allows max 25 options in a select menu
+        
+        let currentPage = 0;
+        
+        const createPage = (page) => {
+            const options = fileChunks[page].map(file => (
+                new StringSelectMenuOptionBuilder()
+                    .setLabel(file)
+                    .setValue(file)
+            ));
+            
+            const menu = new StringSelectMenuBuilder()
+                .setCustomId('select')
+                .setPlaceholder('Select a file')
+                .addOptions(options);
+            
+            const row = new ActionRowBuilder().addComponents(menu);
+            
+            const buttons = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId('previous')
+                    .setLabel('Previous')
+                    .setStyle(ButtonStyle.Primary)
+                    .setDisabled(page === 0),
+                new ButtonBuilder()
+                    .setCustomId('next')
+                    .setLabel('Next')
+                    .setStyle(ButtonStyle.Primary)
+                    .setDisabled(page === fileChunks.length - 1)
             );
 
-            await interaction.reply({ content: 'Please select a file to download:', components: [row], ephemeral: true });
+            return { components: [row, buttons] };
+        };
+        
+        await interaction.reply(createPage(currentPage));
 
-            const filter = i => i.customId === 'selectFile' && i.user.id === interaction.user.id;
+        const filter = i => i.customId === 'select' || i.customId === 'previous' || i.customId === 'next';
+        const collector = interaction.channel.createMessageComponentCollector({ filter, time: 60000 });
 
-            const collector = interaction.channel.createMessageComponentCollector({ filter, time: 60000 });
-
-            collector.on('collect', async i => {
-                const filename = i.values[0];
-
-                const filePath = path.join(__dirname, '..', 'data', 'guilds.json');
-                let guildData = {};
-                try {
-                    if (fs.existsSync(filePath)) {
-                        const data = fs.readFileSync(filePath, 'utf-8');
-                        guildData = JSON.parse(data);
-                    } else {
-                        return i.reply('Please set a default channel first using /setchannel.');
-                    }
-                } catch (error) {
-                    console.error('Error reading guilds.json:', error);
-                    return i.reply('Error reading configuration file.');
-                }
-
-                if (!guildData[guildId] || !guildData[guildId].channelId) {
-                    return i.reply('Please set a default channel first using /setchannel.');
-                }
-
-                const defaultChannelId = guildData[guildId].channelId;
-                const channel = interaction.guild.channels.cache.get(defaultChannelId);
-
-                if (!channel) {
-                    return i.reply('Default channel not found.');
-                }
-
-                const messages = await channel.messages.fetch({ limit: 100 });
-                const fileChunks = messages.filter(msg => msg.attachments.size > 0)
-                    .map(msg => msg.attachments.first())
-                    .filter(attachment => attachment.name.startsWith(filename))
-                    .sort((a, b) => a.name.localeCompare(b.name));
-
-                const chunkFiles = [];
-                for (const file of fileChunks) {
-                    const dest = path.join(__dirname, '..', 'uploads', guildId, file.name);
-                    const writeStream = fs.createWriteStream(dest);
-                    https.get(file.url, response => {
-                        response.pipe(writeStream);
-                        writeStream.on('finish', () => {
-                            writeStream.close();
-                        });
-                    });
-                    chunkFiles.push(file.name);
-                }
-
-                const outputFilePath = fileManager.mergeChunks(guildId, chunkFiles, filename);
-                await i.update({ content: `File ${filename} downloaded successfully!`, files: [outputFilePath], components: [] });
-
-                // Clean up chunk files after merging
-                chunkFiles.forEach(file => fs.unlinkSync(path.join(__dirname, '..', 'uploads', guildId, file)));
-            });
-
-            collector.on('end', collected => {
-                if (collected.size === 0) {
-                    interaction.editReply('No file selected.');
-                }
-            });
+        collector.on('collect', async i => {
+            if (i.customId === 'previous') {
+                currentPage--;
+                await i.update(createPage(currentPage));
+            } else if (i.customId === 'next') {
+                currentPage++;
+                await i.update(createPage(currentPage));
+            } else if (i.customId === 'select') {
+                const selectedFile = i.values[0];
+                const filePath = path.join(filesPath, selectedFile);
+                await i.update({ content: `Downloading ${selectedFile}...`, components: [] });
+                await interaction.followUp({ files: [{ attachment: filePath, name: selectedFile }] });
+                collector.stop();
+            }
         });
-    }
+
+        collector.on('end', collected => {
+            interaction.editReply({ components: [] }).catch(console.error);
+        });
+    },
 };
+
+function chunkArray(array, size) {
+    const result = [];
+    for (let i = 0; i < array.length; i += size) {
+        result.push(array.slice(i, i + size));
+    }
+    return result;
+}

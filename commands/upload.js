@@ -12,6 +12,8 @@ module.exports = {
                 .setDescription('The file to upload')
                 .setRequired(true)),
     async execute(interaction) {
+        await interaction.deferReply(); // 添加这行代码
+
         const attachment = interaction.options.getAttachment('file');
         const guildId = interaction.guildId;
         const filePath = path.join(__dirname, '..', 'data', 'guilds.json');
@@ -19,38 +21,30 @@ module.exports = {
         let guildData = {};
         try {
             if (fs.existsSync(filePath)) {
-                const data = fs.readFileSync(filePath, 'utf-8');
-                guildData = JSON.parse(data);
-                console.log('Guild data read from file:', guildData);
+                guildData = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+                console.log('Guild data read from file:', guildData); // 调试信息
             } else {
-                return interaction.reply('Please set a default channel first using /setchannel.');
+                return interaction.editReply('Please set a default channel first using /setchannel.');
             }
         } catch (error) {
             console.error('Error reading guilds.json:', error);
-            return interaction.reply('Error reading configuration file.');
+            return interaction.editReply('Error reading configuration file.');
         }
 
         if (!guildData[guildId] || !guildData[guildId].channelId) {
-            return interaction.reply('Please set a default channel first using /setchannel.');
+            return interaction.editReply('Please set a default channel first using /setchannel.');
         }
 
         const defaultChannelId = guildData[guildId].channelId;
         const channel = interaction.guild.channels.cache.get(defaultChannelId);
 
         if (!channel) {
-            return interaction.reply('Default channel not found.');
+            return interaction.editReply('Default channel not found.');
         }
 
-        const CHUNK_SIZE = 8 * 1024 * 1024; // 8MB per chunk
-
-        fileManager.uploadFile(attachment.url, guildId, attachment.name, CHUNK_SIZE, async (chunks) => {
-            for (const chunk of chunks) {
-                await channel.send({
-                    files: [chunk]
-                });
-                fs.unlinkSync(chunk); // 删除本地的分割文件
-            }
-            interaction.reply(`File ${attachment.name} uploaded successfully!`);
+        fileManager.uploadFile(attachment.url, guildId, attachment.name, async () => {
+            await channel.send(`File ${attachment.name} uploaded successfully!`);
+            interaction.editReply(`File ${attachment.name} uploaded successfully!`);
         });
     }
 };

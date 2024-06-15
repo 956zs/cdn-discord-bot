@@ -13,15 +13,17 @@ module.exports = {
         const filename = interaction.options.getString('filename');
         const guildId = interaction.guildId;
 
-        if (fileManager.fileExists(guildId, filename)) {
-            fileManager.deleteFile(guildId, filename, err => {
-                if (err) {
-                    return interaction.reply('Error deleting file.');
-                }
-                interaction.reply('File deleted successfully.');
-            });
-        } else {
-            interaction.reply('File not found.');
+        if (!fileManager.fileExists(guildId, filename)) {
+            return interaction.reply('File not found.');
         }
+
+        fileManager.deleteFile(guildId, filename, (error) => {
+            if (error) {
+                console.error(error);
+                return interaction.reply('Error deleting the file.');
+            }
+
+            interaction.reply(`File ${filename} deleted successfully!`);
+        });
     }
 };
